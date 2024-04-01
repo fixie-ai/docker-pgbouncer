@@ -3,6 +3,12 @@
 
 set -e
 
+urldecode() {
+    # urldecode <string>
+    local url_encoded="${1//+/ }"
+    printf '%b' "${url_encoded//%/\\x}"
+}
+
 # Here are some parameters. See all on
 # https://pgbouncer.github.io/config.html
 
@@ -16,25 +22,30 @@ if [ -n "$DATABASE_URL" ]; then
   url="$(echo $DATABASE_URL | sed -e s,$proto,,g)"
 
   # extract the user and password (if any)
-  userpass=$(echo $url | grep @ | sed -r 's/^(.*)@([^@]*)$/\1/')
-  DB_PASSWORD="$(echo $userpass | grep : | cut -d: -f2)"
+  userpass=$(echo $url | grep @ | cut -d@ -f1)
+  rest=$(echo $url | grep @ | cut -d@ -f2-)
+  DB_PASSWORD="$(urldecode $(echo $userpass | grep : | cut -d: -f2))"
   if [ -n "$DB_PASSWORD" ]; then
-    DB_USER=$(echo $userpass | grep : | cut -d: -f1)
+    DB_USER=$(urldecode $(echo $userpass | grep : | cut -d: -f1))
   else
-    DB_USER=$userpass
+    DB_USER=$(urldecode $userpass)
   fi
 
   # extract the host -- updated
-  hostport=`echo $url | sed -e s,$userpass@,,g | cut -d/ -f1`
+  hostport=`echo $rest | grep / | cut -d/ -f1`
   port=`echo $hostport | grep : | cut -d: -f2`
   if [ -n "$port" ]; then
       DB_HOST=`echo $hostport | grep : | cut -d: -f1`
       DB_PORT=$port
-  else
+      DB_NAME="$(echo $rest | grep / | cut -d/ -f2-)"
+  elif [ -n "$hostport" ]; then
       DB_HOST=$hostport
+      DB_NAME="$(echo $rest | grep / | cut -d/ -f2-)"
+  else
+      # Treat it as a socket path (//path/to/socket/dbname)
+      DB_HOST=$(echo $rest | rev | cut -d/ -f2- | rev | cut -d/ -f2-)
+      DB_NAME=$(echo $rest | rev | cut -d/ -f1 | rev)
   fi
-
-  DB_NAME="$(echo $url | grep / | cut -d/ -f2-)"
 fi
 
 # Write the password with MD5 encryption, to avoid printing it during startup.
