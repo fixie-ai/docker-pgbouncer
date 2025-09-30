@@ -1,30 +1,40 @@
-version: '3'
 services:
-
   db:
-    image: postgres:12
+    container_name: db
+    image: postgres:16-alpine
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=hbZkzny5xrvVH
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres']
 
   pgbouncer:
-    image: edoburu/pgbouncer
+    container_name: pgbouncer
+    ### build from source
+    image: pgbouncer
+    build:
+      context: ../..
+      # args:
+      #   VERSION: 1.24.1
+    ### download from dockerhub
+    # image: edoburu/pgbouncer:latest
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=hbZkzny5xrvVH
       - DB_HOST=db
       # - DB_NAME=test
-      # for postgres:14 and above
-      # - AUTH_TYPE=scram-sha-256 
+      - AUTH_TYPE=scram-sha-256 # remove/comment this line if using postgres:13 and lower
       - POOL_MODE=transaction
       - ADMIN_USERS=postgres,dbuser
     ports:
       - "5432:5432"
     depends_on:
       - db
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-h', 'localhost']
 
 volumes:
   pg_data:
